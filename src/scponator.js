@@ -847,7 +847,11 @@ function buildScpCommand(config, source, userHost, destination, action) {
         // Add additional SSH options to handle passphrase prompts properly on macOS
         let sshOptions = '-o BatchMode=no -o StrictHostKeyChecking=no';
         let scpOptions = config.preserveAttributes ? '-p' : '';
-        
+
+        if(config.forceScpProtocol) {
+            scpOptions += ' -O'; // Force SCP protocol
+        }
+
         // SCP command format for upload/download
         if (action === 'upload') {
             return `scp ${authOptions} ${portOption} ${sshOptions} ${scpOptions} -r "${source}" ${userHost}:${destination}`;
