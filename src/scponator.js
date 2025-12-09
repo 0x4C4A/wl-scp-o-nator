@@ -14,6 +14,7 @@ let currentTransferCount = 0;
 let totalTransferCount = 0;
 const outputChannel = vscode.window.createOutputChannel('File Transfer Log');
 const remoteReadOnlyContent = new Map(); // for showFileDiff virtual read only file
+const saveDebounceTimers = new Map(); // Debounce timers for uploadOnSave
 
 function activate(context) {
     outputChannel.appendLine('Activating extension...');
@@ -100,6 +101,87 @@ function activate(context) {
         }
     );
     context.subscriptions.push(providerDisposable);
+
+    // Upload on save listener
+    const onSaveDisposable = vscode.workspace.onDidSaveTextDocument((document) => {
+        try {
+            const config = getConfig(document.uri);
+
+            // Only upload files within workspace
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders) return;
+
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+            if (!document.uri.fsPath.startsWith(workspaceRoot)) {
+                return;
+            }
+
+            const relativePath = path.relative(workspaceRoot, document.uri.fsPath).replace(/\\/g, '/');
+
+            // Check directory mappings first for per-mapping uploadOnSave
+            let uploadOnSaveEnabled = false;
+            let uploadOnSaveDelay = 500;
+            let uploadOnSaveIgnore = null;
+
+            if (config.directoryMappings && config.directoryMappings.length > 0) {
+                // Find matching mapping for this file
+                for (const mapping of config.directoryMappings) {
+                    const normalizedLocalPath = mapping.localPath.replace(/\\/g, '/');
+
+                    if (relativePath === normalizedLocalPath ||
+                        relativePath.startsWith(normalizedLocalPath + '/')) {
+
+                        // Use mapping-specific uploadOnSave setting
+                        uploadOnSaveEnabled = mapping.uploadOnSave === true;
+                        uploadOnSaveDelay = mapping.uploadOnSaveDelay || 500;
+                        uploadOnSaveIgnore = mapping.uploadOnSaveIgnore || null;
+                        break;
+                    }
+                }
+            }
+
+            // Fall back to global uploadOnSave if no mapping matched or mapping doesn't specify
+            if (!uploadOnSaveEnabled && config.uploadOnSave) {
+                uploadOnSaveEnabled = true;
+                uploadOnSaveDelay = config.uploadOnSaveDelay || 500;
+                uploadOnSaveIgnore = config.uploadOnSaveIgnore || null;
+            }
+
+            if (!uploadOnSaveEnabled) {
+                return;
+            }
+
+            // Check if file should be ignored
+            if (uploadOnSaveIgnore && shouldIgnore(relativePath, uploadOnSaveIgnore)) {
+                outputChannel.appendLine(`Skipping upload on save (ignored): ${document.uri.fsPath}`);
+                return;
+            }
+
+            // Clear existing timer for this file
+            const existingTimer = saveDebounceTimers.get(document.uri.fsPath);
+            if (existingTimer) {
+                clearTimeout(existingTimer);
+            }
+
+            // Debounce the upload
+            const timer = setTimeout(() => {
+                saveDebounceTimers.delete(document.uri.fsPath);
+
+                outputChannel.appendLine(`Auto-uploading on save: ${document.uri.fsPath}`);
+                const remotePath = getRemotePath(config, document.uri);
+                const userHost = `${config.username}@${config.host}`;
+
+                uploadFile(config, document.uri.fsPath, remotePath, userHost);
+            }, uploadOnSaveDelay);
+
+            saveDebounceTimers.set(document.uri.fsPath, timer);
+
+        } catch {
+            // Silently fail if config doesn't exist or uploadOnSave not configured
+            // This prevents errors when editing non-configured workspaces
+        }
+    });
+    context.subscriptions.push(onSaveDisposable);
 
     context.subscriptions.push(configureCommand);
     context.subscriptions.push(testConnectionCommand);
