@@ -1,0 +1,9 @@
+repos:
+  - repo: local
+    hooks:
+      - id: npm-lint
+        name: npm lint
+        entry: npm run lint
+        language: system
+        pass_filenames: false
+        files: \.(js|jsx|ts|tsx|mjs|cjs)$
