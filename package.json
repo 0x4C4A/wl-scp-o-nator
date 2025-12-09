@@ -100,7 +100,7 @@
       },
       {
         "command": "scponator.downloadSelected",
-        "key": "ctrl+d",
+        "key": "ctrl+shift+d",
         "when": "editorTextFocus"
       }
     ],
