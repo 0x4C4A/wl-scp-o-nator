@@ -23,7 +23,8 @@ export default [
             "indent": ["error", 4],
             "linebreak-style": ["error", "unix"],
             "no-trailing-spaces": "error",
-            "eol-last": ["error", "always"]
+            "eol-last": ["error", "always"],
+            "no-empty": ["error", { "allowEmptyCatch": true }]
         }
     },
     {

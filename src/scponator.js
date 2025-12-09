@@ -1,5 +1,5 @@
 const vscode = require('vscode');
-const { exec, spawn } = require('child_process');
+const { exec } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -92,9 +92,9 @@ function activate(context) {
 
     // this section is for showFileDiff function, the remote file is loaded into memory to make it read only in pane
     const providerDisposable = vscode.workspace.registerTextDocumentContentProvider(
-            'REMOTEREADONLY',
-            {
-                provideTextDocumentContent(uri) {
+        'REMOTEREADONLY',
+        {
+            provideTextDocumentContent(uri) {
                 return remoteReadOnlyContent.get(uri.toString()) ?? 'Unable to load remote content.';
             }
         }
@@ -105,6 +105,7 @@ function activate(context) {
     context.subscriptions.push(testConnectionCommand);
     context.subscriptions.push(retryFailedCommand);
     context.subscriptions.push(compareFilesCommand);
+    context.subscriptions.push(diffFileCommand);
     context.subscriptions.push(syncDirectoryCommand);
     context.subscriptions.push(uploadDirectoryCommand);
     context.subscriptions.push(downloadDirectoryCommand);
@@ -112,7 +113,6 @@ function activate(context) {
     context.subscriptions.push(downloadSelectedCommand);
     context.subscriptions.push(uploadProjectCommand);
     context.subscriptions.push(downloadProjectCommand);
-    context.subscriptions.push(showFileDiffCommand);
 
     outputChannel.appendLine('Extension activated successfully.');
 }
@@ -146,8 +146,6 @@ function updateStatusBar(message = null) {
     }
 }
 
-let pendingTransfers = 0;
-
 function setupSSHEnvironment() {
     const env = { ...process.env };
 
@@ -171,7 +169,7 @@ function endSession() {
     isTransferring = false;
     outputChannel.appendLine(`Transfer Session ${sessionNumber} ended at: ${new Date().toLocaleString()}`);
     if (errorFiles.length > 0) {
-        outputChannel.appendLine(`Files with errors:`);
+        outputChannel.appendLine('Files with errors:');
         errorFiles.forEach(file => {
             outputChannel.appendLine(`- ${file.path}: ${file.error}`);
             outputChannel.appendLine(`Command used: ${file.command}`);
@@ -398,7 +396,7 @@ async function compareLocalVsRemote(uri) {
             ? `"${config.puttyPath}\\plink.exe" ${portOptionPlink} -i "${config.privateKey}" ${config.username}@${config.host} "stat -c '%s %Y' ${remotePath}"`
             : `ssh ${portOptionSsh} -i "${config.privateKey}" ${config.username}@${config.host} "stat -c '%s %Y' ${remotePath}"`;
 
-        executeCommandWithEnv(statCommand, (err, stdout, stderr) => {
+        executeCommandWithEnv(statCommand, (err, stdout, _stderr) => {
             updateStatusBar();
 
             if (err) {
@@ -473,7 +471,7 @@ async function showFileDiffRemoteVsLocal(uri) {
             }
 
             try {
-                 // read remote content as virtualUri (read-only)
+                // read remote content as virtualUri (read-only)
                 const remoteText = fs.readFileSync(tmpRemotePath, 'utf8');
                 const virtualUri = vscode.Uri.parse(
                     `REMOTEREADONLY:/${baseName} (remote)?t=${Date.now()}`
