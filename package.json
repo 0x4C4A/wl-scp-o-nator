@@ -6,7 +6,7 @@
   "engines": {
     "vscode": "^1.7.0"
   },
-  "publisher": "WatkinsLabs", 
+  "publisher": "WatkinsLabs",
   "author": {
     "name": "Chris Watkins",
     "email": "chris@watkinslabs.com",
@@ -91,7 +91,6 @@
         "command": "scponator.downloadProject",
         "title": "Download Project"
       }
-
     ],
     "keybindings": [
       {
@@ -177,11 +176,18 @@
     ]
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.1",
     "@types/node": "^14.0.0",
+    "eslint": "^9.39.1",
+    "globals": "^16.5.0",
     "micromatch": "^4.0.7"
   },
   "dependencies": {
     "@types/node": "^14.0.0",
     "micromatch": "^4.0.7"
+  },
+  "scripts": {
+    "lint": "eslint src/**/*.js",
+    "lint:fix": "eslint src/**/*.js --fix"
   }
 }
