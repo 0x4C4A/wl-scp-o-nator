@@ -225,11 +225,82 @@ async function showConfigurationWizard() {
             value: '22'
         });
 
-        const remoteDirectory = await vscode.window.showInputBox({
-            prompt: 'Enter the remote directory path',
-            placeHolder: '/var/www/html/'
-        });
-        if (!remoteDirectory) return;
+        // Ask if user wants to use directory mappings
+        const useMappings = await vscode.window.showInformationMessage(
+            'Do you want to configure custom directory mappings? (Advanced feature for mapping specific local directories to different remote paths)',
+            'Yes', 'No', 'What is this?'
+        );
+
+        if (useMappings === 'What is this?') {
+            await vscode.window.showInformationMessage(
+                'Directory mappings let you deploy different local folders to different remote locations. For example: deploy "src/frontend" to "/var/www/html" and "src/backend" to "/opt/api".'
+            );
+        }
+
+        let remoteDirectory = '';
+        let directoryMappings = [];
+
+        if (useMappings === 'Yes') {
+            // Configure directory mappings
+            let continueAdding = true;
+
+            while (continueAdding) {
+                const localPath = await vscode.window.showInputBox({
+                    prompt: 'Enter local directory path (relative to workspace root)',
+                    placeHolder: 'src/frontend'
+                });
+
+                if (!localPath) break;
+
+                const remotePath = await vscode.window.showInputBox({
+                    prompt: `Enter remote directory path for "${localPath}"`,
+                    placeHolder: '/var/www/html/frontend'
+                });
+
+                if (!remotePath) break;
+
+                directoryMappings.push({ localPath, remotePath });
+
+                const addMore = await vscode.window.showInformationMessage(
+                    `Mapping added: ${localPath} → ${remotePath}. Add another mapping?`,
+                    'Yes', 'No'
+                );
+
+                continueAdding = addMore === 'Yes';
+            }
+
+            // Ask for optional default remote directory
+            if (directoryMappings.length > 0) {
+                const addDefault = await vscode.window.showInformationMessage(
+                    'Do you want to add a default remote directory for files not covered by mappings?',
+                    'Yes', 'No'
+                );
+
+                if (addDefault === 'Yes') {
+                    const defaultRemote = await vscode.window.showInputBox({
+                        prompt: 'Enter default remote directory path',
+                        placeHolder: '/var/www/html/'
+                    });
+                    if (defaultRemote) {
+                        remoteDirectory = defaultRemote;
+                    }
+                }
+            } else {
+                vscode.window.showWarningMessage('No mappings configured. Falling back to simple remote directory mode.');
+                remoteDirectory = await vscode.window.showInputBox({
+                    prompt: 'Enter the remote directory path',
+                    placeHolder: '/var/www/html/'
+                });
+                if (!remoteDirectory) return;
+            }
+        } else {
+            // Simple mode - just use remote directory
+            remoteDirectory = await vscode.window.showInputBox({
+                prompt: 'Enter the remote directory path',
+                placeHolder: '/var/www/html/'
+            });
+            if (!remoteDirectory) return;
+        }
 
         const privateKeyPath = await vscode.window.showInputBox({
             prompt: 'Enter path to your SSH private key (optional)',
@@ -272,7 +343,6 @@ async function showConfigurationWizard() {
             host,
             username,
             port: parseInt(port) || 22,
-            remoteDirectory,
             usePuttyTools,
             puttyPath,
             privateKey: privateKeyPath || '',
@@ -285,6 +355,26 @@ async function showConfigurationWizard() {
                 '.DS_Store'
             ]
         };
+
+        // Add remoteDirectory only if set
+        if (remoteDirectory) {
+            config.remoteDirectory = remoteDirectory;
+        }
+
+        // Add directoryMappings only if configured
+        if (directoryMappings.length > 0) {
+            config.directoryMappings = directoryMappings;
+        }
+
+        // Add remoteDirectory only if set
+        if (remoteDirectory) {
+            config.remoteDirectory = remoteDirectory;
+        }
+
+        // Add directoryMappings only if configured
+        if (directoryMappings.length > 0) {
+            config.directoryMappings = directoryMappings;
+        }
 
         // Ensure .vscode directory exists
         if (!fs.existsSync(vscodeDir)) {
@@ -810,14 +900,56 @@ function getConfig(uri) {
     }
 
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-    const requiredFields = ['username', 'host', 'remoteDirectory'];
+    const requiredFields = ['username', 'host'];
     for (const field of requiredFields) {
         if (!config[field]) {
             throw new Error(`Configuration file .scpconfig.json is missing the required field: ${field}`);
         }
     }
 
+    // Validate that either remoteDirectory or directoryMappings is provided
+    if (!config.remoteDirectory && (!config.directoryMappings || config.directoryMappings.length === 0)) {
+        throw new Error('Configuration file must have either "remoteDirectory" or "directoryMappings"');
+    }
+
+    // Validate directory mappings if present
+    if (config.directoryMappings) {
+        validateDirectoryMappings(config);
+    }
+
     return config;
+}
+
+function validateDirectoryMappings(config) {
+    if (!Array.isArray(config.directoryMappings)) {
+        throw new Error('directoryMappings must be an array');
+    }
+
+    if (config.directoryMappings.length === 0) {
+        throw new Error('directoryMappings array cannot be empty');
+    }
+
+    // Validate each mapping
+    config.directoryMappings.forEach((mapping, index) => {
+        if (!mapping.localPath || !mapping.remotePath) {
+            throw new Error(`Mapping at index ${index} is missing localPath or remotePath`);
+        }
+
+        // Normalize paths - remove leading/trailing slashes for consistency
+        mapping.localPath = mapping.localPath.replace(/^[\/\\]+|[\/\\]+$/g, '');
+        mapping.remotePath = mapping.remotePath.replace(/\\/g, '/');
+
+        // Ensure remote path starts with /
+        if (!mapping.remotePath.startsWith('/')) {
+            mapping.remotePath = '/' + mapping.remotePath;
+        }
+    });
+
+    // Sort by localPath length (longest first) for matching priority
+    // This ensures more specific paths are matched before general ones
+    config.directoryMappings.sort((a, b) =>
+        b.localPath.length - a.localPath.length
+    );
 }
 
 function getRemotePath(config, uri) {
@@ -827,7 +959,35 @@ function getRemotePath(config, uri) {
     }
 
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
-    const relativePath = path.relative(workspaceRoot, uri.fsPath);
+    const relativePath = path.relative(workspaceRoot, uri.fsPath).replace(/\\/g, '/');
+
+    // Check if there's a directory mapping that matches
+    if (config.directoryMappings && config.directoryMappings.length > 0) {
+        for (const mapping of config.directoryMappings) {
+            // Normalize the mapping localPath for comparison
+            const normalizedLocalPath = mapping.localPath.replace(/\\/g, '/');
+
+            // Check if file is within mapped directory
+            if (relativePath === normalizedLocalPath ||
+                relativePath.startsWith(normalizedLocalPath + '/')) {
+
+                // Log which mapping is being used
+                outputChannel.appendLine(`Using mapping: ${mapping.localPath} -> ${mapping.remotePath}`);
+
+                // Replace the matched local path with remote path
+                const remainingPath = relativePath.substring(normalizedLocalPath.length);
+                const remotePath = path.join(mapping.remotePath, remainingPath).replace(/\\/g, '/');
+                return remotePath;
+            }
+        }
+    }
+
+    // Fallback to default remoteDirectory
+    if (!config.remoteDirectory) {
+        throw new Error(`No directory mapping found for "${relativePath}" and no default remoteDirectory configured`);
+    }
+
+    outputChannel.appendLine(`Using default remoteDirectory: ${config.remoteDirectory}`);
     return path.join(config.remoteDirectory, relativePath).replace(/\\/g, '/');
 }
 

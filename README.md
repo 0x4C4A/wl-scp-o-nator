@@ -88,6 +88,14 @@ Create a file named `.vscode/scpconfig.json` and add the following content:
 }
 ```
 
+**How it works:**
+- Files in `src/frontend/` → deployed to `/var/www/html/`
+- Files in `src/backend/` → deployed to `/opt/api/`
+- Files in `shared/` → deployed to `/usr/local/lib/shared/`
+- All other files → deployed to `remoteDirectory` (if specified)
+
+**Note:** Either `remoteDirectory` or `directoryMappings` must be configured (or both).
+
 ### Setting Up SSH Public Key Authentication
 
 To securely access your remote server without entering a password, set up SSH public key authentication. This extension supports both OpenSSH and PuTTY key formats.
@@ -128,6 +136,38 @@ To securely access your remote server without entering a password, set up SSH pu
 
    - Ensure that the path to your PuTTY tools (`pscp.exe` and `plink.exe`) is correctly set in the `puttyPath` field of your `.scpconfig.json`.
    - Specify the path to your `.ppk` private key file in the `privateKey` field.
+
+### Directory Mappings
+
+For complex projects where different local directories should be deployed to different remote locations, use directory mappings:
+
+```json
+{
+  "username": "your-username",
+  "host": "your-host",
+  "port": 22,
+  "directoryMappings": [
+    {
+      "localPath": "src/frontend",
+      "remotePath": "/var/www/html"
+    },
+    {
+      "localPath": "src/backend",
+      "remotePath": "/opt/api"
+    },
+    {
+      "localPath": "shared",
+      "remotePath": "/usr/local/lib/shared"
+    }
+  ],
+  "remoteDirectory": "/default/path",  // Optional fallback for unmapped files
+  "privateKey": "~/.ssh/id_rsa",
+  "ignore": [
+    "node_modules",
+    ".git"
+  ]
+}
+```
 
 ### Usage
 

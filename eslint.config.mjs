@@ -24,7 +24,8 @@ export default [
             "linebreak-style": ["error", "unix"],
             "no-trailing-spaces": "error",
             "eol-last": ["error", "always"],
-            "no-empty": ["error", { "allowEmptyCatch": true }]
+            "no-empty": ["error", { "allowEmptyCatch": true }],
+            "no-useless-escape": ["error", { "allowRegexCharacters": ["/"] }]
         }
     },
     {

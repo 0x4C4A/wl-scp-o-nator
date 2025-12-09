@@ -1,0 +1,25 @@
+{
+  "host": "example.com",
+  "username": "user",
+  "port": 22,
+  "directoryMappings": [
+    {
+      "localPath": "src/frontend",
+      "remotePath": "/var/www/html"
+    },
+    {
+      "localPath": "src/backend",
+      "remotePath": "/opt/api"
+    }
+  ],
+  "remoteDirectory": "/default/deployment/path",
+  "privateKey": "~/.ssh/id_rsa",
+  "forceScpProtocol": false,
+  "preserveAttributes": false,
+  "ignore": [
+    "node_modules",
+    ".git",
+    "*.log",
+    ".DS_Store"
+  ]
+}
