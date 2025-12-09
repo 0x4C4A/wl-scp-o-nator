@@ -59,13 +59,15 @@ We think its better to work from your local machine and push to the remote one -
 ## Installation
 
 1. **Install the Extension**: Search for `SCP-O-NATOR` in the Visual Studio Code Extensions marketplace and install it.
-2. **Create a Configuration File**: Create a `.scpconfig.json` file in the root of your workspace or the directory where your files are located.
+2. **Create a Configuration File**: Use the configuration wizard (`Ctrl+Shift+P` → "SCP-O-Nator: Setup Configuration") or manually create a `scpconfig.json` file in the `.vscode` directory of your workspace.
+
+**Note:** Legacy configurations in the workspace root are still supported but will be automatically migrated to `.vscode/scpconfig.json` when you run the configuration wizard.
 
 ## Configuration
 
-### Example `.scpconfig.json`
+### Example `scpconfig.json`
 
-Create a file named `.scpconfig.json` and add the following content:
+Create a file named `.vscode/scpconfig.json` and add the following content:
 
 ```json
 {
@@ -84,7 +86,7 @@ Create a file named `.scpconfig.json` and add the following content:
     "*.log"
   ]
 }
-``` 
+```
 
 ### Setting Up SSH Public Key Authentication
 

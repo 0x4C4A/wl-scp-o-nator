@@ -185,10 +185,19 @@ async function showConfigurationWizard() {
         return;
     }
 
-    const configPath = path.join(workspaceFolders[0].uri.fsPath, '.scpconfig.json');
+    const vscodeDir = path.join(workspaceFolders[0].uri.fsPath, '.vscode');
+    const configPath = path.join(vscodeDir, 'scpconfig.json');
+    const legacyConfigPath = path.join(workspaceFolders[0].uri.fsPath, '.scpconfig.json');
 
-    // Check if config already exists
-    if (fs.existsSync(configPath)) {
+    // Check if config already exists (in either location)
+    let existingConfigPath = null;
+
+    if(fs.existsSync(configPath))
+        existingConfigPath = configPath;
+    else if (fs.existsSync(legacyConfigPath))
+        existingConfigPath = legacyConfigPath;
+
+    if (existingConfigPath) {
         const answer = await vscode.window.showInformationMessage(
             'Configuration file already exists. Do you want to recreate it?',
             'Yes', 'No'
@@ -277,8 +286,19 @@ async function showConfigurationWizard() {
             ]
         };
 
-        // Write configuration file
+        // Ensure .vscode directory exists
+        if (!fs.existsSync(vscodeDir)) {
+            fs.mkdirSync(vscodeDir, { recursive: true });
+        }
+
+        // Write configuration file to .vscode directory
         fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+
+        // Remove legacy config if it exists
+        if (fs.existsSync(legacyConfigPath)) {
+            fs.unlinkSync(legacyConfigPath);
+            outputChannel.appendLine(`Removed legacy config file: ${legacyConfigPath}`);
+        }
 
         vscode.window.showInformationMessage(
             `Configuration saved to ${configPath}. Would you like to test the connection?`,
@@ -753,16 +773,39 @@ function shouldIgnore(filePath, patterns) {
 }
 
 function getConfig(uri) {
-    let configPath = uri ? path.join(path.dirname(uri.fsPath), '.scpconfig.json') : '';
+    let configPath = '';
+    const dir = path.dirname(uri ? uri.fsPath : '');
+    // Check .vscode directory first (new location)
+    const vscodeConfigPath = path.join(dir, '.vscode', 'scpconfig.json');
+    if (fs.existsSync(vscodeConfigPath)) {
+        configPath = vscodeConfigPath;
+    } else {
+        // Fall back to directory root (legacy location)
+        configPath = path.join(dir, '.scpconfig.json');
+    }
 
     if (!fs.existsSync(configPath)) {
         const workspaceFolders = vscode.workspace.workspaceFolders;
         if (workspaceFolders) {
-            configPath = path.join(workspaceFolders[0].uri.fsPath, '.scpconfig.json');
+            const workspaceRoot = workspaceFolders[0].uri.fsPath;
+
+            // Check .vscode directory first (new location)
+            const vscodeConfigPath = path.join(workspaceRoot, '.vscode', 'scpconfig.json');
+            if (fs.existsSync(vscodeConfigPath)) {
+                configPath = vscodeConfigPath;
+            } else {
+                // Fall back to root directory (legacy location)
+                const rootConfigPath = path.join(workspaceRoot, '.scpconfig.json');
+                if (fs.existsSync(rootConfigPath)) {
+                    configPath = rootConfigPath;
+                    outputChannel.appendLine(`Using legacy config location: ${rootConfigPath}`);
+                    outputChannel.appendLine('Consider running "SCP-O-Nator: Setup Configuration" to migrate to .vscode directory');
+                }
+            }
         }
 
         if (!fs.existsSync(configPath)) {
-            throw new Error('Configuration file .scpconfig.json not found in the selected directory or workspace root!');
+            throw new Error('Configuration file .scpconfig.json not found in .vscode directory or workspace root!');
         }
     }
 
