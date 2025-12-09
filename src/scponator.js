@@ -17,7 +17,7 @@ const remoteReadOnlyContent = new Map(); // for showFileDiff virtual read only f
 
 function activate(context) {
     outputChannel.appendLine('Activating extension...');
-    
+
     // Initialize status bar
     statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     context.subscriptions.push(statusBarItem);
@@ -150,20 +150,20 @@ let pendingTransfers = 0;
 
 function setupSSHEnvironment() {
     const env = { ...process.env };
-    
+
     // Fix SSH passphrase issues on macOS by ensuring proper SSH_ASKPASS handling
     if (os.platform() === 'darwin') {
         // Use VS Code's built-in credential helper or system keychain
         env.SSH_ASKPASS_REQUIRE = 'never';
         env.DISPLAY = ':0'; // Fallback display
     }
-    
+
     return env;
 }
 
 function executeCommandWithEnv(command, callback) {
     const env = setupSSHEnvironment();
-    
+
     exec(command, { env }, callback);
 }
 
@@ -188,7 +188,7 @@ async function showConfigurationWizard() {
     }
 
     const configPath = path.join(workspaceFolders[0].uri.fsPath, '.scpconfig.json');
-    
+
     // Check if config already exists
     if (fs.existsSync(configPath)) {
         const answer = await vscode.window.showInformationMessage(
@@ -281,7 +281,7 @@ async function showConfigurationWizard() {
 
         // Write configuration file
         fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
-        
+
         vscode.window.showInformationMessage(
             `Configuration saved to ${configPath}. Would you like to test the connection?`,
             'Test Now', 'Later'
@@ -298,11 +298,11 @@ async function showConfigurationWizard() {
 
 async function testSSHConnection() {
     updateStatusBar('Testing SSH connection...');
-    
+
     try {
         const config = getConfig(null);
         const testCommand = buildMkdirCommand(config, '/tmp');
-        
+
         executeCommandWithEnv(testCommand, (err, stdout, stderr) => {
             if (err) {
                 vscode.window.showErrorMessage(`SSH connection failed: ${stderr}`);
@@ -314,7 +314,7 @@ async function testSSHConnection() {
             }
             updateStatusBar();
         });
-        
+
     } catch (error) {
         vscode.window.showErrorMessage(`Configuration error: ${error.message}`);
         updateStatusBar();
@@ -329,10 +329,10 @@ function retryFailedTransfers() {
 
     const failedFiles = [...errorFiles];
     errorFiles = [];
-    
+
     startNewSession();
     outputChannel.appendLine(`Retrying ${failedFiles.length} failed transfers...`);
-    
+
     isTransferring = true;
     totalTransferCount = failedFiles.length;
     currentTransferCount = 0;
@@ -343,7 +343,7 @@ function retryFailedTransfers() {
         completedCount++;
         currentTransferCount = completedCount;
         updateStatusBar();
-        
+
         if (completedCount >= failedFiles.length) {
             isTransferring = false;
             endSession();
@@ -352,7 +352,7 @@ function retryFailedTransfers() {
 
     failedFiles.forEach((failedFile, index) => {
         outputChannel.appendLine(`[${index + 1}/${failedFiles.length}] Retrying: ${failedFile.path}`);
-        
+
         // Re-execute the original command
         executeCommandWithEnv(failedFile.command, (err, stdout, stderr) => {
             if (err) {
@@ -360,11 +360,11 @@ function retryFailedTransfers() {
                 errorFiles.push(failedFile);
             } else {
                 outputChannel.appendLine(`Retry successful: ${failedFile.path}`);
-                transferredFiles.push({ 
-                    direction: 'Retried', 
-                    path: failedFile.path, 
-                    size: 'Unknown', 
-                    timestamp: new Date() 
+                transferredFiles.push({
+                    direction: 'Retried',
+                    path: failedFile.path,
+                    size: 'Unknown',
+                    timestamp: new Date()
                 });
             }
             onRetryComplete();
@@ -382,9 +382,9 @@ async function compareLocalVsRemote(uri) {
         const config = getConfig(uri);
         const localPath = uri.fsPath;
         const remotePath = getRemotePath(config, uri);
-        
+
         updateStatusBar('Comparing files...');
-        
+
         // Get local file stats
         const localStats = fs.statSync(localPath);
         const localSize = localStats.size;
@@ -392,23 +392,23 @@ async function compareLocalVsRemote(uri) {
         // Add port for plink or ssh if specified
         const portOptionPlink = config.port && config.port !== 22 ? `-P ${config.port}` : '';
         const portOptionSsh   = config.port && config.port !== 22 ? `-p ${config.port}` : '';
-        
+
         // Get remote file stats using SSH
-        const statCommand = config.usePuttyTools 
+        const statCommand = config.usePuttyTools
             ? `"${config.puttyPath}\\plink.exe" ${portOptionPlink} -i "${config.privateKey}" ${config.username}@${config.host} "stat -c '%s %Y' ${remotePath}"`
             : `ssh ${portOptionSsh} -i "${config.privateKey}" ${config.username}@${config.host} "stat -c '%s %Y' ${remotePath}"`;
-        
+
         executeCommandWithEnv(statCommand, (err, stdout, stderr) => {
             updateStatusBar();
-            
+
             if (err) {
                 vscode.window.showWarningMessage(`Remote file not found or inaccessible: ${remotePath}`);
                 return;
             }
-            
+
             const [remoteSize, remoteMtimeUnix] = stdout.trim().split(' ');
             const remoteMtime = new Date(parseInt(remoteMtimeUnix) * 1000);
-            
+
             const comparison = {
                 localSize: parseInt(localSize),
                 remoteSize: parseInt(remoteSize),
@@ -417,17 +417,17 @@ async function compareLocalVsRemote(uri) {
                 sizeDiff: parseInt(localSize) - parseInt(remoteSize),
                 timeDiff: localMtime.getTime() - remoteMtime.getTime()
             };
-            
+
             let message = `File Comparison: ${path.basename(localPath)}\n\n`;
             message += `Local:  ${comparison.localSize} bytes, modified ${comparison.localMtime}\n`;
             message += `Remote: ${comparison.remoteSize} bytes, modified ${comparison.remoteMtime}\n\n`;
-            
+
             if (comparison.sizeDiff === 0) {
                 message += '✅ Sizes match';
             } else {
                 message += `❌ Size difference: ${comparison.sizeDiff} bytes`;
             }
-            
+
             if (Math.abs(comparison.timeDiff) < 1000) {
                 message += '\n✅ Modification times match';
             } else if (comparison.timeDiff > 0) {
@@ -435,11 +435,11 @@ async function compareLocalVsRemote(uri) {
             } else {
                 message += '\n📥 Remote file is newer';
             }
-            
+
             vscode.window.showInformationMessage(message);
             outputChannel.appendLine(message);
         });
-        
+
     } catch (error) {
         updateStatusBar();
         vscode.window.showErrorMessage(`Comparison failed: ${error.message}`);
@@ -458,10 +458,10 @@ async function showFileDiffRemoteVsLocal(uri) {
         const baseName = path.basename(localPath);
         const tmpRootFolder = fs.mkdtempSync(path.join(os.tmpdir(), 'scponator-diff-'));
         const tmpRemotePath = path.join(tmpRootFolder, baseName);
-        
+
         const scpCommand = buildScpCommand(config, remotePath, userHost, tmpRemotePath, 'download');
         outputChannel.appendLine(`Downloading remote copy for diff: ${remotePath}`);
- 
+
         executeCommandWithEnv(scpCommand, async (err, _stdout, stderr) => {
             updateStatusBar();
             if (err) {
@@ -483,12 +483,12 @@ async function showFileDiffRemoteVsLocal(uri) {
                 const left = virtualUri;
                 const right = vscode.Uri.file(localPath); // local
                 const title = `${baseName} - remote vs local`;
-                
+
                 // display same order as left and right variable (so the local filename appears in the diff editor tab)
                 // and the local file appears in the right hand pane
                 await vscode.commands.executeCommand('vscode.diff', left, right, title);
                 outputChannel.appendLine(`Opened diff: ${tmpRemotePath} (remote) <> ${localPath} (local)`);
-            
+
                 // try to remove temp file and folder now (content is cached in memory)
                 try { fs.unlinkSync(tmpRemotePath); } catch {}
                 try { fs.rmdirSync(tmpRootFolder); } catch {}
@@ -524,25 +524,25 @@ async function syncDirectory(uri) {
         'Sync directory with remote? This will upload newer local files and download newer remote files.',
         'Sync Now', 'Cancel'
     );
-    
+
     if (answer !== 'Sync Now') return;
 
     try {
         const config = getConfig(uri);
         const localPath = uri.fsPath;
         const remotePath = getRemotePath(config, uri);
-        
+
         startNewSession();
         updateStatusBar('Synchronizing directory...');
-        
+
         outputChannel.appendLine(`Starting bidirectional sync: ${localPath} <-> ${remotePath}`);
-        
+
         // For now, implement simple upload (can be enhanced later)
         handleDirectoryTransfer('upload', uri, () => {
             updateStatusBar();
             vscode.window.showInformationMessage('Directory sync completed (upload only for now)');
         });
-        
+
     } catch (error) {
         updateStatusBar();
         vscode.window.showErrorMessage(`Sync failed: ${error.message}`);
@@ -551,7 +551,7 @@ async function syncDirectory(uri) {
 
 function handleSingleFileTransfer(action, uri, callback) {
     outputChannel.appendLine(`Handling single file transfer for action: ${action}`);
- 
+
     try {
         const config = getConfig(uri);
         const localPath = uri.fsPath;
@@ -563,7 +563,7 @@ function handleSingleFileTransfer(action, uri, callback) {
             callback();
         } else if (action === 'download') {
             downloadFile(config, localPath, remotePath, userHost, callback);
-        } 
+        }
     } catch (error) {
         vscode.window.showErrorMessage(`Configuration error: ${error.message}`);
         outputChannel.appendLine(`Configuration error: ${error.message}`);
@@ -584,7 +584,7 @@ function handleDirectoryTransfer(action, uri, callback) {
         callback();
         return;
     }
- 
+
     try {
         const config = getConfig(uri);
         const localPath = uri.fsPath;
@@ -595,7 +595,7 @@ function handleDirectoryTransfer(action, uri, callback) {
             uploadDirectory(config, localPath, remotePath, userHost, callback);
         } else if (action === 'download') {
             downloadDirectory(config, localPath, remotePath, userHost, callback);
-        } 
+        }
     } catch (error) {
         vscode.window.showErrorMessage(`Configuration error: ${error.message}`);
         outputChannel.appendLine(`Configuration error: ${error.message}`);
@@ -605,7 +605,7 @@ function handleDirectoryTransfer(action, uri, callback) {
 
 function handleMultipleSelection(action, uri, uris, callback) {
     outputChannel.appendLine(`Handling multiple selection transfer for action: ${action}`);
-    
+
     // If no multiple selection (uris is undefined), fall back to single selection
     if (!uris || uris.length === 0) {
         if (uri) {
@@ -621,7 +621,7 @@ function handleMultipleSelection(action, uri, uris, callback) {
             uri = getActiveFileUri();
             if (uri) {
                 if (action == 'upload') {
-                    vscode.workspace.saveAll(false); 
+                    vscode.workspace.saveAll(false);
                 }
                 handleSingleFileTransfer(action, uri, callback);
             } else {
@@ -637,21 +637,21 @@ function handleMultipleSelection(action, uri, uris, callback) {
     totalTransferCount = uris.length;
     currentTransferCount = 0;
     updateStatusBar();
-    
+
     outputChannel.appendLine(`Processing ${uris.length} selected items...`);
-    
+
     try {
         const config = getConfig(uris[0]);
         const userHost = `${config.username}@${config.host}`;
-        
+
         let completedCount = 0;
         let totalCount = uris.length;
-        
+
         const onItemComplete = () => {
             completedCount++;
             currentTransferCount = completedCount;
             updateStatusBar();
-            
+
             if (completedCount >= totalCount) {
                 isTransferring = false;
                 callback();
@@ -663,9 +663,9 @@ function handleMultipleSelection(action, uri, uris, callback) {
             const localPath = selectedUri.fsPath;
             const remotePath = getRemotePath(config, selectedUri);
             const isDirectory = fs.lstatSync(localPath).isDirectory();
-            
+
             outputChannel.appendLine(`[${index + 1}/${totalCount}] Processing: ${localPath}`);
-            
+
             if (isDirectory) {
                 if (action === 'upload') {
                     uploadDirectory(config, localPath, remotePath, userHost, onItemComplete);
@@ -681,7 +681,7 @@ function handleMultipleSelection(action, uri, uris, callback) {
                 }
             }
         });
-        
+
     } catch (error) {
         isTransferring = false;
         vscode.window.showErrorMessage(`Configuration error: ${error.message}`);
@@ -815,7 +815,7 @@ function createRemoteDirectory(config, remoteDir, callback, retryCount = 3, dela
 function buildScpCommand(config, source, userHost, destination, action) {
     let authOptions = '';
     let portOption = '';
-    
+
     // Add port configuration if specified
     if (config.port && config.port !== 22) {
         portOption = config.usePuttyTools ? `-P ${config.port}` : `-P ${config.port}`;
@@ -827,7 +827,7 @@ function buildScpCommand(config, source, userHost, destination, action) {
         if (config.privateKey) {
             authOptions = `-i "${config.privateKey}"`;
         }
-        
+
         // Add -scp flag for pscp compatibility with older OpenWrt devices
         let scpFlag = config.forceScpProtocol ? '-scp' : '';
         let pscpOptions = config.preserveAttributes ? '-p' : '';
@@ -843,7 +843,7 @@ function buildScpCommand(config, source, userHost, destination, action) {
         if (config.privateKey) {
             authOptions = `-i "${config.privateKey}"`;
         }
-        
+
         // Add additional SSH options to handle passphrase prompts properly on macOS
         let sshOptions = '-o BatchMode=no -o StrictHostKeyChecking=no';
         let scpOptions = config.preserveAttributes ? '-p' : '';
@@ -865,7 +865,7 @@ function buildScpCommand(config, source, userHost, destination, action) {
 function buildMkdirCommand(config, remoteDir) {
     let authOptions = '';
     let portOption = '';
-    
+
     // Add port configuration if specified
     if (config.port && config.port !== 22) {
         portOption = config.usePuttyTools ? `-P ${config.port}` : `-p ${config.port}`;
@@ -884,10 +884,10 @@ function buildMkdirCommand(config, remoteDir) {
         if (config.privateKey) {
             authOptions = `-i "${config.privateKey}"`;
         }
-        
+
         // Add SSH options to handle passphrase prompts properly on macOS
         let sshOptions = '-o BatchMode=no -o StrictHostKeyChecking=no';
-        
+
         // SSH command for directory creation
         return `ssh ${authOptions} ${portOption} ${sshOptions} ${config.username}@${config.host} "mkdir -p ${remoteDir}"`;
     }
